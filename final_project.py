@@ -3,13 +3,15 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
+# python final_project.py ncaa.csv nba.csv
+
 class CustomLogisticRegression:
     """
     A Logistic Regression implementation to predict NBA prospects.
 
-    Parameters:
-    - learning_rate: float, the learning rate for gradient descent.
-    - num_iterations: int, the number of iterations for gradient descent.
+    Args:
+    - learning_rate (float): The learning rate for gradient descent.
+    - num_iterations (int): The number of iterations for gradient descent.
 
     Methods:
     - sigmoid(z): Applies the sigmoid function to the input.
@@ -81,21 +83,22 @@ class CustomLogisticRegression:
         return predictions
 
 class NBAProspectsClassifier:
-    """
+    """"
     NBA Prospects Classifier that compares the stats of current NCAA basketball players
     with former NCAA basketball players who made it to the NBA.
 
-    Parameters:
-    - ncaa_data_path: str, the path to the CSV file containing NCAA basketball data.
-    - nba_data_path: str, the path to the CSV file containing NBA basketball data.
-    - threshold: float, the classification threshold.
+    Args:
+    - ncaa_data_path (str): Path to the CSV file containing NCAA basketball data.
+    - nba_data_path (str): Path to the CSV file containing NBA basketball data.
+    - threshold (float): The classification threshold.
 
     Methods:
     - load_data(filepath): Loads the dataset from a CSV file.
     - calculate_z_scores(stat_names): Calculates Z-scores for each statistical measure.
     - train_model(): Trains the logistic regression model.
     - predict_ncaa_players(): Predicts the probability of NCAA players being NBA prospects.
-    - visualize_data(column): Visualizes the distribution of a specific column.
+    - compare_z_scores(stat_names): Visualizes the Z-scores for NCAA players' stats.
+
     """
     def __init__(self, ncaa_data_path, nba_data_path, threshold=0.99):
         """
@@ -142,8 +145,7 @@ class NBAProspectsClassifier:
 
         for stat in stat_names:
             z_scores_data[f'{stat}_z_score'] = [
-                (current_players.loc[i, stat] - np.mean(former_players[stat])) /
-                ((np.std(current_players[stat])**2/len(current_players)) + (np.std(former_players[stat])**2/len(former_players)))**0.5
+                (current_players.loc[i, stat] - np.mean(former_players[stat])) / np.std(former_players[stat])
                 for i in range(len(current_players))
             ]
 
@@ -161,39 +163,6 @@ class NBAProspectsClassifier:
         z_scores_df.index = np.arange(1, len(z_scores_df) + 1)
 
         return z_scores_df
-
-    def compare_z_scores(self, stat_names):
-        """
-        Visualizes the average Z-score for each NCAA player and compares with the Z-scores of the entire NBA data.
-
-        Args:
-        - stat_names (List): Names of statistical measures for interpretation.
-
-        Returns:
-        - None
-        """
-        # Calculate Z-scores for NCAA players
-        z_scores_df = self.calculate_z_scores(stat_names)
-
-        # Calculate mean Z-scores for the entire NBA data
-        mean_nba_z_scores = self.nba_data[stat_names].apply(lambda x: (x - np.mean(x)) / np.std(x)).mean(axis=1)
-
-        # Plotting
-        plt.figure(figsize=(12, 8))
-
-        # Plot Z-scores for NCAA players
-        plt.bar(z_scores_df['Player'], z_scores_df['Mean_Z_Score'], label='NCAA Players', color='skyblue')
-
-        # Plot mean Z-scores for the entire NBA data
-        plt.axhline(y=mean_nba_z_scores.mean(), color='red', linestyle='--', label='Mean NBA Z-Score')
-
-        plt.title('Average Z-Score for NCAA Players vs. Mean NBA Z-Score')
-        plt.xlabel('Player')
-        plt.ylabel('Average Z-Score')
-        plt.xticks(rotation=45, ha='right')
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
 
     def train_model(self):
         """
@@ -216,9 +185,19 @@ class NBAProspectsClassifier:
         - DataFrame: Predictions for NCAA players.
         """
         X_ncaa = self.ncaa_data[['Points_Per_Game', 'Rebounds_Per_Game', 'Assists_Per_Game']]
-        probabilities = self.custom_model.predict_proba(X_ncaa)
+        z_scores = self.calculate_z_scores(['Points_Per_Game', 'Rebounds_Per_Game', 'Assists_Per_Game'])
 
-        probabilities /= 2.75
+        # Scale Z-scores to a range suitable for the hyperbolic tangent function
+        scaled_z_scores = (z_scores['Mean_Z_Score'] - z_scores['Mean_Z_Score'].mean()) / z_scores['Mean_Z_Score'].std()
+
+        # Map Z-scores to probabilities using the hyperbolic tangent function
+        probabilities = (np.tanh(scaled_z_scores) + 1) / 2
+        
+        # Realism factor
+        probabilities /= 2.25
+
+        # Replace NaN values in probabilities with a default value (0)
+        probabilities = np.nan_to_num(probabilities, nan=0)
 
         # Create a DataFrame with predictions
         predictions_df = pd.DataFrame({
@@ -228,13 +207,45 @@ class NBAProspectsClassifier:
 
         # Order the DataFrame by probability in descending order
         predictions_df = predictions_df.sort_values(by='Probability_of_NBA_Prospect', ascending=False)
-
-        # Resetting index to start numbering from 1
         predictions_df.index = np.arange(1, len(predictions_df) + 1)
 
         return predictions_df
     
+    def compare_z_scores(self, stat_names):
+        """
+        Visualizes the Z-scores for each statistical measure of NCAA players.
+
+        Args:
+        - stat_names (List): Names of statistical measures for interpretation.
+
+        Returns:
+        - None
+        """
+        # Calculate Z-scores for NCAA players
+        z_scores_df = self.calculate_z_scores(stat_names)
+
+        # Plotting
+        plt.figure(figsize=(12, 8))
+
+        bar_width = 0.3  # Width of each bar
+        positions = np.arange(1, len(z_scores_df) + 1)
+
+        # Plotting side-by-side bars for each statistical measure
+        for i, stat in enumerate(stat_names):
+            plt.bar(positions + (i - 1) * bar_width, z_scores_df[f'{stat}_z_score'], width=bar_width, label=f'{stat} Z-Score', alpha=0.7)
+
+        plt.title('Z-Scores for NCAA Players (Points, Rebounds, Assists)')
+        plt.xlabel('Player')
+        plt.ylabel('Z-Score')
+        plt.xticks(positions, z_scores_df['Player'], rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+    
 def main():
+    """
+    Parses arguments and executes NBA Prospects Classifier functionality.
+    """
     parser = argparse.ArgumentParser(description="NBA Prospects Classifier")
     parser.add_argument("ncaa_data_path", help="Path to the CSV file containing NCAA basketball data")
     parser.add_argument("nba_data_path", help="Path to the CSV file containing NBA basketball data")
@@ -244,8 +255,8 @@ def main():
     args = parser.parse_args()
 
     classifier = NBAProspectsClassifier(
-        ncaa_data_path=args.ncaa_data_path,
-        nba_data_path=args.nba_data_path,
+        ncaa_data_path='ncaa.csv',
+        nba_data_path='nba.csv',
         threshold=args.threshold
     )
 
