@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 
 class CustomLogisticRegression:
     """
@@ -149,15 +150,50 @@ class NBAProspectsClassifier:
         # Create a DataFrame with Z-scores
         z_scores_df = pd.DataFrame(z_scores_data)
 
-        # Order the DataFrame by the mean Z-score in ascending order
+        # Calculate the mean Z-score for each NCAA player
         mean_z_scores = z_scores_df[[f'{stat}_z_score' for stat in stat_names]].mean(axis=1)
         z_scores_df['Mean_Z_Score'] = mean_z_scores
+
+        # Order the DataFrame by the mean Z-score in ascending order
         z_scores_df = z_scores_df.sort_values(by='Mean_Z_Score', ascending=False)
 
         # Resetting index to start numbering from 1
         z_scores_df.index = np.arange(1, len(z_scores_df) + 1)
 
         return z_scores_df
+
+    def compare_z_scores(self, stat_names):
+        """
+        Visualizes the average Z-score for each NCAA player and compares with the Z-scores of the entire NBA data.
+
+        Args:
+        - stat_names (List): Names of statistical measures for interpretation.
+
+        Returns:
+        - None
+        """
+        # Calculate Z-scores for NCAA players
+        z_scores_df = self.calculate_z_scores(stat_names)
+
+        # Calculate mean Z-scores for the entire NBA data
+        mean_nba_z_scores = self.nba_data[stat_names].apply(lambda x: (x - np.mean(x)) / np.std(x)).mean(axis=1)
+
+        # Plotting
+        plt.figure(figsize=(12, 8))
+
+        # Plot Z-scores for NCAA players
+        plt.bar(z_scores_df['Player'], z_scores_df['Mean_Z_Score'], label='NCAA Players', color='skyblue')
+
+        # Plot mean Z-scores for the entire NBA data
+        plt.axhline(y=mean_nba_z_scores.mean(), color='red', linestyle='--', label='Mean NBA Z-Score')
+
+        plt.title('Average Z-Score for NCAA Players vs. Mean NBA Z-Score')
+        plt.xlabel('Player')
+        plt.ylabel('Average Z-Score')
+        plt.xticks(rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
     def train_model(self):
         """
@@ -230,6 +266,9 @@ def main():
     # Visualize the distribution of a specified column
     if args.visualize_column:
         classifier.visualize_data(args.visualize_column)
+        
+    # Compare Z-scores for NCAA players with the entire NBA data
+    classifier.compare_z_scores(stat_names)
 
 if __name__ == "__main__":
     main()
