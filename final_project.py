@@ -3,8 +3,6 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
-# python final_project.py ncaa.csv nba.csv
-
 class CustomLogisticRegression:
     """
     A Logistic Regression implementation to predict NBA prospects.
